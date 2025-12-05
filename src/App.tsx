@@ -1,57 +1,16 @@
-import { useState, useRef } from "react";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
-import coreURL from "@ffmpeg/core?url";
-import wasmURL from "@ffmpeg/core/wasm?url";
+import { fetchFile } from "@ffmpeg/util";
+import { useRef, useState } from "react";
 import "./App.css";
+import { useLoadFFmpeg } from "./hooks/useLoadFfmpeg";
 
 function App() {
-  const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const ffmpegRef = useRef(new FFmpeg());
 
-  /**
-   * 加载 FFmpeg
-   * 需要从 CDN 加载 wasm 文件
-   */
-  const handleLoad = async () => {
-    const ffmpeg = ffmpegRef.current;
-    setLoading(true);
-    setMessage("正在加载 FFmpeg...");
-
-    try {
-      // 设置日志回调
-      ffmpeg.on("log", ({ message: logMessage }) => {
-        console.log(logMessage);
-      });
-
-      // 设置进度回调
-      ffmpeg.on("progress", ({ progress }) => {
-        const percent = (progress * 100).toFixed(2);
-        setMessage(`处理进度: ${percent}%`);
-      });
-
-      setMessage("正在初始化 FFmpeg...");
-      await ffmpeg.load({
-        coreURL: await toBlobURL(coreURL, "text/javascript"),
-        wasmURL: await toBlobURL(wasmURL, "application/wasm"),
-        // workerURL: await toBlobURL(workerURL, "text/javascript"),
-      });
-
-      setLoaded(true);
-      setMessage("FFmpeg 加载成功！");
-    } catch (error) {
-      console.error("加载 FFmpeg 失败:", error);
-      setMessage("加载 FFmpeg 失败，请检查网络连接");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  const { loading: ffmpegLoading, ffmpegRef } = useLoadFFmpeg();
   /**
    * 处理文件选择
    */
@@ -68,7 +27,7 @@ function App() {
    * 提取视频中的音频
    */
   const handleExtractAudio = async () => {
-    if (!videoFile || !loaded) {
+    if (!videoFile || ffmpegLoading) {
       setMessage("请先选择文件并加载 FFmpeg");
       return;
     }
@@ -107,7 +66,7 @@ function App() {
       }
       const blob = new Blob([uint8Array as BlobPart], { type: "audio/mp3" });
       const url = URL.createObjectURL(blob);
-      console.log('url',url)
+      console.log("url", url);
       setOutputUrl(url);
       setMessage("音频提取成功！");
 
@@ -126,7 +85,7 @@ function App() {
    * 转换视频格式（例如转换为 GIF）
    */
   const handleConvertToGif = async () => {
-    if (!videoFile || !loaded) {
+    if (!videoFile || ffmpegLoading) {
       setMessage("请先选择文件并加载 FFmpeg");
       return;
     }
@@ -197,19 +156,10 @@ function App() {
       <h1>FFmpeg.wasm 示例</h1>
 
       <div className="card">
-        {!loaded ? (
-          <button
-            onClick={handleLoad}
-            disabled={loading}
-          >
-            {loading ? "加载中..." : "加载 FFmpeg"}
-          </button>
-        ) : (
-          <div className="loaded-status">✓ FFmpeg 已加载</div>
-        )}
+        <div className="loaded-status">{!ffmpegLoading ? "✓ FFmpeg 已加载" : "... 加载中"}</div>
       </div>
 
-      {loaded && (
+      {!ffmpegLoading && (
         <div className="card">
           <div className="file-input-wrapper">
             <input
